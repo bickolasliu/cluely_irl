@@ -150,8 +150,9 @@ class SpeechStreamRecognizer {
                 // Send partial results for live transcript display (conversation assistant mode)
                 if !result.isFinal {
                     let partialText = self.lastRecognizedText + cacheString
+                    let formattedText = self.formatTranscriptWithNewlines(partialText)
                     DispatchQueue.main.async {
-                        self.onPartialTranscript?(partialText)
+                        self.onPartialTranscript?(formattedText)
                     }
                 }
             }
@@ -222,18 +223,20 @@ class SpeechStreamRecognizer {
                     print("✅ Final segment: \(transcript)")
                     print("📝 Full transcript now: \(self.fullTranscript)")
 
-                    // Send complete transcript
+                    // Send complete transcript with formatting
+                    let formattedTranscript = self.formatTranscriptWithNewlines(self.fullTranscript)
                     DispatchQueue.main.async {
-                        self.onRecognitionResult?(self.fullTranscript)
+                        self.onRecognitionResult?(formattedTranscript)
                     }
                 } else {
                     // Send partial results, but throttle to max 2 updates per second
                     let now = Date()
                     if now.timeIntervalSince(self.lastPartialUpdate) >= 0.5 {
                         let currentText = self.fullTranscript + transcript
+                        let formattedText = self.formatTranscriptWithNewlines(currentText)
                         self.lastPartialUpdate = now
                         DispatchQueue.main.async {
-                            self.onPartialTranscript?(currentText)
+                            self.onPartialTranscript?(formattedText)
                         }
                     }
                 }
@@ -283,6 +286,22 @@ class SpeechStreamRecognizer {
         fullTranscript = ""
     }
 
+    private func formatTranscriptWithNewlines(_ text: String) -> String {
+        // Add newlines after sentence-ending punctuation for better readability
+        var formatted = text
+
+        // Replace period + space with period + newline
+        formatted = formatted.replacingOccurrences(of: ". ", with: ".\n")
+
+        // Replace question mark + space with question mark + newline
+        formatted = formatted.replacingOccurrences(of: "? ", with: "?\n")
+
+        // Replace exclamation + space with exclamation + newline
+        formatted = formatted.replacingOccurrences(of: "! ", with: "!\n")
+
+        return formatted
+    }
+
     // MARK: - Legacy methods for glasses microphone (keep for compatibility)
 
     func stopRecognition() {
@@ -290,8 +309,9 @@ class SpeechStreamRecognizer {
         print("stopRecognition-----self.lastRecognizedText-------\(self.lastRecognizedText)------cacheString----------\(cacheString)---")
         self.lastRecognizedText += cacheString
 
+        let formattedText = formatTranscriptWithNewlines(self.lastRecognizedText)
         DispatchQueue.main.async {
-            self.onRecognitionResult?(self.lastRecognizedText)
+            self.onRecognitionResult?(formattedText)
         }
 
         recognitionTask?.cancel()

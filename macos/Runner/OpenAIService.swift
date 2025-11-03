@@ -176,13 +176,14 @@ class OpenAIService {
         let decoder = JSONDecoder()
         let responsesResponse = try decoder.decode(ResponsesResponse.self, from: data)
 
-        // Extract text from output
+        // Extract text from output (ignoring sources/citations/annotations)
+        // We only want the pure text content for display on glasses
         if let outputText = responsesResponse.output_text {
             print("✅ Got response (output_text): \(outputText.prefix(100))...")
             return outputText
         }
 
-        // Or extract from output array
+        // Or extract from output array (still ignoring annotations)
         let text = responsesResponse.output?.compactMap { outputItem in
             outputItem.content?.compactMap { $0.text }.joined()
         }.joined(separator: "\n") ?? ""

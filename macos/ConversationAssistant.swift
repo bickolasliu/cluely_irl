@@ -27,6 +27,7 @@ class ConversationAssistant {
     private var isAnalyzing: Bool = false // Prevent concurrent analyses
     private var lastTranscriptUpdate: Date? // Track last transcript change
     private var currentAnalysisTask: Task<Void, Never>? // Track current task for cancellation
+    private var lastAnalyzedTranscript: String = "" // Track transcript we last analyzed
 
     private init() {}
 
@@ -68,6 +69,7 @@ class ConversationAssistant {
         fullTranscript = ""
         transcriptStartTime = nil
         lastTranscriptUpdate = nil
+        lastAnalyzedTranscript = "" // Reset so next analysis will run
         print("🗑️ Transcript cleared")
     }
 
@@ -127,7 +129,14 @@ class ConversationAssistant {
             return
         }
 
-        print("🧠 Analyzing conversation... (\(transcript.count) chars)")
+        // Skip if transcript hasn't changed since last analysis
+        if transcript == lastAnalyzedTranscript {
+            print("⏭️ Skipping analysis - transcript unchanged")
+            return
+        }
+
+        print("🧠 Analyzing conversation... (\(transcript.count) chars, changed: \(transcript != lastAnalyzedTranscript))")
+        lastAnalyzedTranscript = transcript
         isAnalyzing = true
 
         // Cancel any existing task
@@ -172,56 +181,75 @@ class ConversationAssistant {
     private func getSuggestions(for transcript: String) async throws -> [ConversationSuggestion] {
         print("📤 Sending to GPT-5 with web search enabled...")
 
-        // Focus on the most recent part of the transcript (last 200 chars)
-        let recentTranscript = String(transcript.suffix(200))
+        // Focus on the most recent part of the transcript (last 300 chars for better context)
+        let recentTranscript = String(transcript.suffix(300))
+
+        // Extract the VERY LAST sentence/utterance (most critical)
+        let lastUtterance = extractLastUtterance(from: recentTranscript)
 
         let prompt = """
-RECENT CONVERSATION (most important):
+CONTEXT: You are an AI assistant helping someone wearing smart glasses. The person is having a conversation or needs information displayed on their glasses. The transcript below is from their microphone.
+
+MOST RECENT UTTERANCE (HIGHEST PRIORITY - focus here!):
+"\(lastUtterance)"
+
+FULLER CONTEXT (for reference):
 "\(recentTranscript)"
 
-CRITICAL: Focus on the MOST RECENT utterance (end of transcript above). This is what was just said!
+🚨 CRITICAL: The LAST utterance above is what was JUST spoken. This is your primary focus!
 
-YOUR TASK: If the most recent utterance contains a QUESTION, provide the ANSWER. Otherwise, suggest what to say next.
+YOUR TASK:
+1. If the last utterance is a QUESTION → Provide a DIRECT ANSWER with facts
+2. If the last utterance is a statement → Suggest relevant follow-up questions or helpful information
+3. Your response will be displayed on smart glasses - keep it ultra-concise!
 
-QUESTION DETECTION (HIGH PRIORITY):
-- Look for question words: "what", "who", "where", "when", "how", "which", "why"
-- Look for question marks: "?"
-- Look for phrases like: "tell me about", "I wonder", "do you know"
+QUESTION DETECTION (TOP PRIORITY):
+- Question words: "what", "who", "where", "when", "how", "which", "why", "is", "are", "can", "does"
+- Question marks: "?"
+- Question phrases: "tell me", "I wonder", "do you know", "can you", "how tall", "how many"
 
-IF QUESTION DETECTED → ANSWER IT (use web search):
-Example: "what's the tallest building" → Reply with:
-Burj Khalifa
-828 meters
-Dubai
-Opened 2010
-163 floors
+📍 IF QUESTION DETECTED → ANSWER IT NOW (use web search for facts):
 
-Example: "who won the super bowl" → Reply with:
+Example: Last utterance: "How tall is the Empire State building"
+Correct response:
+1,454 feet
+381 meters
+102 floors
+Built 1931
+NYC landmark
+
+Example: Last utterance: "who won the super bowl"
+Correct response:
 Chiefs won
 38-35 score
 Feb 2024
 Mahomes MVP
 Vegas
 
-IF NO QUESTION → SUGGEST RESPONSES:
-Example: "discussing the project budget" → Reply with:
+💬 IF NO QUESTION → SUGGEST HELPFUL INFO:
+
+Example: Last utterance: "discussing the project budget"
+Correct response:
 Timeline?
-Costs breakdown
+Cost breakdown
 ROI estimate
-Resources needed
-Risk factors
+Resources?
+Risks
 
-CRITICAL RULES:
+ULTRA-CRITICAL RULES:
 1. Maximum 3 words per line
-2. Focus on END of transcript (what was JUST said)
-3. ALWAYS answer questions with FACTS (use web search)
-4. Be ultra-concise - abbreviate everything
-5. No numbering, no extra text
+2. FOCUS ON THE LAST UTTERANCE - ignore older parts of transcript
+3. If there's ANY question in the last utterance, ANSWER IT with facts
+4. Use web search for factual questions
+5. Be ultra-concise - abbreviate everything
+6. No numbering, bullets, or extra text
+7. Response shows on glasses - make it instantly readable
+8. NO SOURCES, NO CITATIONS, NO URLs - just the pure facts/suggestions
 
-Reply with ONLY 5 items, one per line:
+Reply with ONLY 5 items, one per line (no sources):
 """
 
-        print("📝 Sending optimized prompt (focusing on last 200 chars)...")
+        print("📝 Sending optimized prompt (last utterance: '\(lastUtterance.prefix(50))...', context: \(recentTranscript.count) chars)...")
 
         let response = try await openAIService.sendChatRequest(question: prompt, enableWebSearch: true)
 
@@ -246,6 +274,31 @@ Reply with ONLY 5 items, one per line:
         print("✅ Returning \(suggestions.count) suggestions")
 
         return suggestions
+    }
+
+    private func extractLastUtterance(from transcript: String) -> String {
+        // Extract the last sentence or question from the transcript
+        // Look for sentence boundaries: period, question mark, or significant pause indicators
+
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Try to find the last sentence by looking for punctuation
+        let sentenceDelimiters = CharacterSet(charactersIn: ".?!")
+        let components = trimmed.components(separatedBy: sentenceDelimiters)
+
+        // Get the last non-empty component
+        let lastSentence = components.last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? trimmed
+
+        // If the last sentence is very short, it might be incomplete - take more context
+        let lastUtterance = lastSentence.trimmingCharacters(in: .whitespaces)
+
+        // If it's too short (less than 5 chars), just return the last 150 chars of full transcript
+        if lastUtterance.count < 5 {
+            return String(trimmed.suffix(150))
+        }
+
+        // Limit to last 150 chars to keep it focused
+        return String(lastUtterance.suffix(150))
     }
 
     private func formatForGlasses(_ suggestions: [ConversationSuggestion]) -> String {
