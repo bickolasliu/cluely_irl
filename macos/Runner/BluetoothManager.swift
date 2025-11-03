@@ -37,6 +37,10 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     var rightRChar:CBCharacteristic?
 
     var hasStartedSpeech = false
+    var pcmPacketCount = 0
+    var recordingStartTime: Date?
+    var autoStopTimer: Timer?
+    var speechRecognitionFailed = false
 
     override init() {
         UARTServiceUUID          = CBUUID(string: ServiceIdentifiers.uartServiceUUIDString)
@@ -253,34 +257,55 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     }
     
     
+    func stopRecordingWithTimeout() {
+        print("🛑 Stopping recording (timeout or manual)")
+        autoStopTimer?.invalidate()
+        autoStopTimer = nil
+        pcmPacketCount = 0
+        recordingStartTime = nil
+
+        // Send mic off command
+        let micOffCommand = Data([0x0E, 0x00])
+        sendData(data: micOffCommand, lr: "R")
+        print("🎤 Sent microphone deactivation command")
+
+        // Stop speech recognition
+        SpeechStreamRecognizer.shared.stopRecognition()
+    }
+
     func sendData(data: Data, lr: String? = nil) {
         writeData(writeData: data, lr: lr)
     }
 
     func writeData(writeData: Data, cbPeripheral: CBPeripheral? = nil, lr: String? = nil) {
         if lr == "L" {
-            if self.leftWChar != nil {
-                self.leftPeripheral?.writeValue(writeData, for: self.leftWChar!, type: .withoutResponse)
+            guard let leftPeripheral = self.leftPeripheral, leftPeripheral.state == .connected, let leftWChar = self.leftWChar else {
+                print("⚠️ Cannot write to LEFT: peripheral not connected or characteristic nil (state: \(self.leftPeripheral?.state.rawValue ?? -1))")
+                return
             }
+            leftPeripheral.writeValue(writeData, for: leftWChar, type: .withoutResponse)
             return
         }
         if lr == "R" {
-            if self.rightWChar != nil {
-                self.rightPeripheral?.writeValue(writeData, for: self.rightWChar!, type: .withoutResponse)
+            guard let rightPeripheral = self.rightPeripheral, rightPeripheral.state == .connected, let rightWChar = self.rightWChar else {
+                print("⚠️ Cannot write to RIGHT: peripheral not connected or characteristic nil (state: \(self.rightPeripheral?.state.rawValue ?? -1))")
+                return
             }
+            rightPeripheral.writeValue(writeData, for: rightWChar, type: .withoutResponse)
             return
         }
-        
-        if let leftWChar = self.leftWChar {
-            self.leftPeripheral?.writeValue(writeData, for: leftWChar, type: .withoutResponse)
+
+        // Send to both
+        if let leftPeripheral = self.leftPeripheral, leftPeripheral.state == .connected, let leftWChar = self.leftWChar {
+            leftPeripheral.writeValue(writeData, for: leftWChar, type: .withoutResponse)
         } else {
-            print("writeData leftWChar is nil, cannot write data to right peripheral.")
+            print("⚠️ Cannot write to LEFT: not connected or characteristic nil")
         }
 
-        if let rightWChar = self.rightWChar {
-            self.rightPeripheral?.writeValue(writeData, for: rightWChar, type: .withoutResponse)
+        if let rightPeripheral = self.rightPeripheral, rightPeripheral.state == .connected, let rightWChar = self.rightWChar {
+            rightPeripheral.writeValue(writeData, for: rightWChar, type: .withoutResponse)
         } else {
-            print("writeData rightWChar is nil, cannot write data to right peripheral.")
+            print("⚠️ Cannot write to RIGHT: not connected or characteristic nil")
         }
     }
     
@@ -308,13 +333,21 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         let rspCommand = AG_BLE_REQ(rawValue: (data[0]))
         switch rspCommand{
             case .BLE_REQ_TRANSFER_MIC_DATA:
-                 // Auto-start recognition if not already started
+                 // Only process PCM data if speech recognition is already active
+                 // (started by command 23 from glasses)
                  if !SpeechStreamRecognizer.shared.isRecording {
-                     print("🎤 PCM data detected - auto-starting recognition")
-                     SpeechStreamRecognizer.shared.startRecognition(identifier: "EN")
+                     // Ignore PCM data if not actively recording
+                     // This can happen if glasses send residual data after connection
+                     return
                  }
 
-                 let hexString = data.map { String(format: "%02hhx", $0) }.joined()
+                 // Only log every 10th packet to reduce spam
+                 pcmPacketCount += 1
+                 if pcmPacketCount % 10 == 1 {
+                     let elapsed = recordingStartTime.map { Int(-$0.timeIntervalSinceNow) } ?? 0
+                     print("🎵 Recording: \(pcmPacketCount) packets (\(elapsed)s)")
+                 }
+
                  let effectiveData = data.subdata(in: 2..<data.count)
                  let pcmConverter = PcmConverter()
                  var pcmData = pcmConverter.decode(effectiveData)
@@ -327,22 +360,54 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                 // Check for control commands (0xF5 prefix)
                 if data.count >= 2 && data[0] == 0xF5 {
                     let commandIndex = data[1]
-                    print("Received BLE command: 0xF5 \(commandIndex)")
+                    let hexCommand = String(format: "0x%02X", commandIndex)
+                    print("Received BLE command: 0xF5 \(hexCommand) (decimal: \(commandIndex))")
 
                     switch commandIndex {
-                    case 23: // Start voice input
-                        print("🎤 Glasses triggered voice input START")
+                    case 0: // Exit feature
+                        print("🚪 Exit command (double tap)")
+                        // TODO: Handle exit
+                    case 1: // Page navigation
+                        let isLeft = cbPeripheral?.identifier.uuidString == self.leftUUIDStr
+                        print("📄 Page navigation - \(isLeft ? "Previous" : "Next") page")
+                        // TODO: Handle page navigation
+                    case 23: // 0x17 hex = 23 decimal - Start voice input (long-press left button)
+                        print("🎤 Glasses triggered voice input START (cmd 23) - User pressed left button")
+                        pcmPacketCount = 0
+                        recordingStartTime = Date()
+                        speechRecognitionFailed = false // Reset in case user enabled dictation
+
+                        // Set auto-stop timer (30 seconds max)
+                        autoStopTimer?.invalidate()
+                        autoStopTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: false) { [weak self] _ in
+                            print("⏱️ Auto-stopping recording after 30 seconds")
+                            self?.stopRecordingWithTimeout()
+                        }
+
                         onStartVoiceInput?()
-                    case 24: // Stop voice input
-                        print("🛑 Glasses triggered voice input STOP")
+                    case 24: // 0x18 hex = 24 decimal - Stop voice input
+                        print("🛑 Glasses triggered voice input STOP (cmd 24)")
+                        autoStopTimer?.invalidate()
                         onStopVoiceInput?()
                     default:
-                        print("Unknown command index: \(commandIndex)")
+                        print("⚠️ Unknown BLE command: \(commandIndex) (hex: \(hexCommand))")
                     }
                 }
 
                 let isLeft = cbPeripheral?.identifier.uuidString == self.leftUUIDStr
                 let legStr = isLeft ? "L" : "R"
+
+                // Log the actual data bytes for debugging
+                let hexString = data.map { String(format: "%02X", $0) }.joined(separator: " ")
+                print("📥 BLE Response from \(legStr): \(hexString) (\(data.count) bytes)")
+
+                // Check for acknowledgment or error responses
+                if data.count >= 2 && data[0] == 0xC9 {
+                    print("✅ Received acknowledgment (0xC9) from glasses")
+                } else if data.count >= 2 && data[0] == 0x4E {
+                    print("📝 Received 0x4E response - possible text display acknowledgment")
+                }
+
                 var dictionary = [String: Any]()
                 dictionary["type"] = "type"
                 dictionary["lr"] = legStr
@@ -376,15 +441,27 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             packet.append(textData)
         }
 
-        // Add CRC-16 checksum (exclude CRC bytes themselves)
-        let crc = calculateCRC(data: packet)
-        packet.append(UInt8(crc & 0xFF)) // CRC low byte
-        packet.append(UInt8((crc >> 8) & 0xFF)) // CRC high byte
+        // NOTE: NO CRC for 0x4E text command! (Only used for BMP image updates)
+        // The working Flutter code does NOT add CRC for text display
 
-        // Send to both glasses (left then right)
-        sendData(data: packet, lr: nil)
+        // Print detailed hex dump for debugging
+        let hexString = packet.map { String(format: "%02X", $0) }.joined(separator: " ")
+        print("🔍 Hex dump of packet (\(packet.count) bytes):")
+        print("   \(hexString)")
+        print("   Header: 4E \(String(format: "%02X", packet[1])) \(String(format: "%02X", packet[2])) \(String(format: "%02X", packet[3])) \(String(format: "%02X", newScreen)) \(String(format: "%02X", packet[5])) \(String(format: "%02X", packet[6])) \(String(format: "%02X", currentPage)) \(String(format: "%02X", maxPage))")
+        print("   Text length: \(text.utf8.count) bytes")
 
-        print("✅ Sent \(packet.count) bytes to glasses (0x4E protocol)")
+        // Send to LEFT first, then RIGHT (matching Flutter implementation)
+        sendData(data: packet, lr: "L")
+        print("✅ Sent \(packet.count) bytes to LEFT glasses")
+
+        // Small delay between left and right
+        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+
+        // Then send to RIGHT
+        sendData(data: packet, lr: "R")
+        print("✅ Sent \(packet.count) bytes to RIGHT glasses")
+
         return true
     }
 

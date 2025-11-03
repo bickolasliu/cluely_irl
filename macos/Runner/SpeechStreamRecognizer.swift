@@ -109,6 +109,20 @@ class SpeechStreamRecognizer {
             guard let self = self else { return }
             if let error = error {
                 print("❌ SpeechRecognizer Recognition error: \(error)")
+
+                // Check if it's the "Siri and Dictation disabled" error
+                let nsError = error as NSError
+                if nsError.domain == "kLSRErrorDomain" && nsError.code == 201 {
+                    print("⚠️ CRITICAL: Siri and Dictation are disabled!")
+                    print("   → Go to System Settings → Privacy & Security → Speech Recognition")
+                    print("   → Toggle ON to enable dictation")
+
+                    // Mark as failed and stop the microphone on glasses
+                    DispatchQueue.main.async {
+                        BluetoothManager.shared.speechRecognitionFailed = true
+                        BluetoothManager.shared.stopRecordingWithTimeout()
+                    }
+                }
             } else if let result = result {
                 print("🗣️ Transcription: \(result.bestTranscription.formattedString)")
 

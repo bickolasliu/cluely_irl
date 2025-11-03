@@ -80,19 +80,39 @@ class ChatViewModel: ObservableObject {
     }
 
     private func sendToGlasses(_ text: String) async {
-        // Split text into lines for glasses display
-        let lines = measureStringList(text)
+        print("🔧 Sending text to glasses (Flutter-style two-phase)")
 
-        if lines.isEmpty { return }
+        // Truncate and format text exactly like Flutter
+        let truncatedText = String(text.prefix(100))
 
-        // Send first page
-        let firstPage = lines.prefix(5).joined(separator: "\n")
+        // Add leading newlines (Flutter adds \n\n for short text)
+        let formattedText = "\n\n\(truncatedText)"
+
+        print("📝 Formatted text: '\(formattedText)'")
+
+        // Phase 1: Send with 0x30 status (0x31 after OR with 0x01)
+        // This prepares the glasses for text display
+        print("📤 Phase 1: Sending with 0x31 (prepare mode)")
         await BluetoothManager.shared.sendEvenAIData(
-            text: firstPage,
+            text: formattedText,
             newScreen: 0x31, // 0x01 | 0x30
             pos: 0,
             currentPage: 1,
-            maxPage: Int(ceil(Double(lines.count) / 5.0))
+            maxPage: 1
+        )
+
+        // Wait 3 seconds (as Flutter does)
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+
+        // Phase 2: Send with 0x40 status (0x41 after OR with 0x01)
+        // This triggers auto-display/exit mode
+        print("📤 Phase 2: Sending with 0x41 (auto-display mode)")
+        await BluetoothManager.shared.sendEvenAIData(
+            text: formattedText,
+            newScreen: 0x41, // 0x01 | 0x40
+            pos: 0,
+            currentPage: 1,
+            maxPage: 1
         )
     }
 
