@@ -41,6 +41,8 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     var recordingStartTime: Date?
     var autoStopTimer: Timer?
     var speechRecognitionFailed = false
+    var heartbeatTimer: Timer?
+    var heartbeatSeq: UInt8 = 0
 
     override init() {
         UARTServiceUUID          = CBUUID(string: ServiceIdentifiers.uartServiceUUIDString)
@@ -91,6 +93,9 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
     }
 
     func disconnectFromGlasses(result: @escaping (Result<String, Error>) -> Void) {
+        // Stop heartbeat
+        stopHeartbeat()
+
         for (_, devices) in connectedDevices {
             if let leftPeripheral = devices.0 {
                 centralManager.cancelPeripheralConnection(leftPeripheral)
@@ -171,6 +176,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                 self.connectionStatus = "Connected:\nLeft: \(leftPeripheral.name ?? "")\nRight: \(rightPeripheral.name ?? "")"
             }
             currentConnectingDeviceName = nil
+            // Heartbeat will start after characteristics are discovered
         }
     }
     
@@ -221,13 +227,29 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
             if(peripheral.identifier.uuidString == self.leftUUIDStr){
                 if(self.leftRChar != nil && self.leftWChar != nil){
                     self.leftPeripheral?.setNotifyValue(true, for: self.leftRChar!)
-                  
+
                     self.writeData(writeData: Data([0x4d, 0x01]), lr: "L")
+
+                    // If both sides are ready, start heartbeat
+                    if self.rightRChar != nil && self.rightWChar != nil && heartbeatTimer == nil {
+                        print("💓 Both glasses ready - starting heartbeat messages (every 8 seconds)")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            self.startHeartbeat()
+                        }
+                    }
                 }
             }else if(peripheral.identifier.uuidString == self.rightUUIDStr){
                 if(self.rightRChar != nil && self.rightWChar != nil){
                     self.rightPeripheral?.setNotifyValue(true, for: self.rightRChar!)
                     self.writeData(writeData: Data([0x4d, 0x01]), lr: "R")
+
+                    // If both sides are ready, start heartbeat
+                    if self.leftRChar != nil && self.leftWChar != nil && heartbeatTimer == nil {
+                        print("💓 Both glasses ready - starting heartbeat messages (every 8 seconds)")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            self.startHeartbeat()
+                        }
+                    }
                 }
             }
         }
@@ -273,40 +295,88 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         SpeechStreamRecognizer.shared.stopRecognition()
     }
 
-    func sendData(data: Data, lr: String? = nil) {
-        writeData(writeData: data, lr: lr)
+    func startHeartbeat() {
+        // Stop existing timer
+        heartbeatTimer?.invalidate()
+        heartbeatSeq = 0
+
+        // Send heartbeat every 8 seconds
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { [weak self] _ in
+            self?.sendHeartbeat()
+        }
+
+        // Send first heartbeat immediately
+        sendHeartbeat()
     }
 
-    func writeData(writeData: Data, cbPeripheral: CBPeripheral? = nil, lr: String? = nil) {
+    func sendHeartbeat() {
+        // Heartbeat format: [0x25, length_lo, length_hi, seq, 0x04, seq]
+        let length: UInt16 = 6
+        let packet = Data([
+            0x25,
+            UInt8(length & 0xFF),
+            UInt8((length >> 8) & 0xFF),
+            heartbeatSeq,
+            0x04,
+            heartbeatSeq
+        ])
+
+        heartbeatSeq = heartbeatSeq &+ 1 // Wrapping increment
+
+        // Send to left first, then right
+        sendData(data: packet, lr: "L")
+        sendData(data: packet, lr: "R")
+
+        print("💓 Heartbeat sent (seq: \(heartbeatSeq - 1))")
+    }
+
+    func stopHeartbeat() {
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+        print("💔 Heartbeat stopped")
+    }
+
+    func sendData(data: Data, lr: String? = nil) -> Bool {
+        return writeData(writeData: data, lr: lr)
+    }
+
+    func writeData(writeData: Data, cbPeripheral: CBPeripheral? = nil, lr: String? = nil) -> Bool {
         if lr == "L" {
             guard let leftPeripheral = self.leftPeripheral, leftPeripheral.state == .connected, let leftWChar = self.leftWChar else {
                 print("⚠️ Cannot write to LEFT: peripheral not connected or characteristic nil (state: \(self.leftPeripheral?.state.rawValue ?? -1))")
-                return
+                return false
             }
             leftPeripheral.writeValue(writeData, for: leftWChar, type: .withoutResponse)
-            return
+            return true
         }
         if lr == "R" {
             guard let rightPeripheral = self.rightPeripheral, rightPeripheral.state == .connected, let rightWChar = self.rightWChar else {
                 print("⚠️ Cannot write to RIGHT: peripheral not connected or characteristic nil (state: \(self.rightPeripheral?.state.rawValue ?? -1))")
-                return
+                return false
             }
             rightPeripheral.writeValue(writeData, for: rightWChar, type: .withoutResponse)
-            return
+            return true
         }
 
         // Send to both
+        var leftSuccess = false
+        var rightSuccess = false
+
         if let leftPeripheral = self.leftPeripheral, leftPeripheral.state == .connected, let leftWChar = self.leftWChar {
             leftPeripheral.writeValue(writeData, for: leftWChar, type: .withoutResponse)
+            leftSuccess = true
         } else {
             print("⚠️ Cannot write to LEFT: not connected or characteristic nil")
         }
 
         if let rightPeripheral = self.rightPeripheral, rightPeripheral.state == .connected, let rightWChar = self.rightWChar {
             rightPeripheral.writeValue(writeData, for: rightWChar, type: .withoutResponse)
+            rightSuccess = true
         } else {
             print("⚠️ Cannot write to RIGHT: not connected or characteristic nil")
         }
+
+        return leftSuccess && rightSuccess
     }
     
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
@@ -361,17 +431,22 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
                 if data.count >= 2 && data[0] == 0xF5 {
                     let commandIndex = data[1]
                     let hexCommand = String(format: "0x%02X", commandIndex)
-                    print("Received BLE command: 0xF5 \(hexCommand) (decimal: \(commandIndex))")
 
                     switch commandIndex {
                     case 0: // Exit feature
+                        print("Received BLE command: 0xF5 \(hexCommand) (decimal: \(commandIndex))")
                         print("🚪 Exit command (double tap)")
                         // TODO: Handle exit
                     case 1: // Page navigation
+                        print("Received BLE command: 0xF5 \(hexCommand) (decimal: \(commandIndex))")
                         let isLeft = cbPeripheral?.identifier.uuidString == self.leftUUIDStr
                         print("📄 Page navigation - \(isLeft ? "Previous" : "Next") page")
                         // TODO: Handle page navigation
+                    case 9, 10, 17: // Initialization/status commands sent by glasses on connection
+                        // Silently ignore - these are not user actions
+                        break
                     case 23: // 0x17 hex = 23 decimal - Start voice input (long-press left button)
+                        print("Received BLE command: 0xF5 \(hexCommand) (decimal: \(commandIndex))")
                         print("🎤 Glasses triggered voice input START (cmd 23) - User pressed left button")
                         pcmPacketCount = 0
                         recordingStartTime = Date()
@@ -386,6 +461,7 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
 
                         onStartVoiceInput?()
                     case 24: // 0x18 hex = 24 decimal - Stop voice input
+                        print("Received BLE command: 0xF5 \(hexCommand) (decimal: \(commandIndex))")
                         print("🛑 Glasses triggered voice input STOP (cmd 24)")
                         autoStopTimer?.invalidate()
                         onStopVoiceInput?()
@@ -452,17 +528,25 @@ class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate, CB
         print("   Text length: \(text.utf8.count) bytes")
 
         // Send to LEFT first, then RIGHT (matching Flutter implementation)
-        sendData(data: packet, lr: "L")
-        print("✅ Sent \(packet.count) bytes to LEFT glasses")
+        let leftSuccess = sendData(data: packet, lr: "L")
+        if leftSuccess {
+            print("✅ Sent \(packet.count) bytes to LEFT glasses")
+        } else {
+            print("❌ Failed to send to LEFT glasses")
+        }
 
         // Small delay between left and right
         try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
         // Then send to RIGHT
-        sendData(data: packet, lr: "R")
-        print("✅ Sent \(packet.count) bytes to RIGHT glasses")
+        let rightSuccess = sendData(data: packet, lr: "R")
+        if rightSuccess {
+            print("✅ Sent \(packet.count) bytes to RIGHT glasses")
+        } else {
+            print("❌ Failed to send to RIGHT glasses")
+        }
 
-        return true
+        return leftSuccess && rightSuccess
     }
 
     private func calculateCRC(data: Data) -> UInt16 {

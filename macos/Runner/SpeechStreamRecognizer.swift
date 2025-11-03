@@ -2,7 +2,7 @@
 //  SpeechStreamRecognizer.swift
 //  Runner
 //
-//  Adapted for macOS
+//  Adapted for macOS - Continuous Mac microphone listening
 //
 import AVFoundation
 import Speech
@@ -11,11 +11,16 @@ class SpeechStreamRecognizer {
     static let shared = SpeechStreamRecognizer()
 
     var onRecognitionResult: ((String) -> Void)?
+    var onPartialTranscript: ((String) -> Void)? // Real-time partial results
     var isRecording: Bool = false
 
     private var recognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    private var audioEngine: AVAudioEngine?
+    private var inputNode: AVAudioInputNode?
+
+    private var fullTranscript: String = "" // Complete ongoing transcript
     private var lastRecognizedText: String = "" // latest accepted recognized text
 
     let languageDic = [
@@ -146,6 +151,127 @@ class SpeechStreamRecognizer {
         isRecording = true
         print("✅ Speech recognition fully started and ready for audio")
     }
+
+    // MARK: - Continuous Mac Microphone Listening
+
+    func startContinuousMacListening(identifier: String) {
+        print("🎤 Starting continuous Mac microphone listening...")
+
+        // Clean up any existing session
+        stopContinuousMacListening()
+
+        // Initialize audio engine
+        audioEngine = AVAudioEngine()
+        guard let audioEngine = audioEngine else {
+            print("❌ Failed to create audio engine")
+            return
+        }
+
+        inputNode = audioEngine.inputNode
+
+        let localIdentifier = languageDic[identifier] ?? "en-US"
+        recognizer = SFSpeechRecognizer(locale: Locale(identifier: localIdentifier))
+
+        guard let recognizer = recognizer, recognizer.isAvailable else {
+            print("❌ Speech recognizer not available")
+            return
+        }
+
+        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
+        guard let recognitionRequest = recognitionRequest else {
+            print("❌ Failed to create recognition request")
+            return
+        }
+
+        recognitionRequest.shouldReportPartialResults = true
+        recognitionRequest.requiresOnDeviceRecognition = true
+
+        print("🔄 Starting fresh - clearing transcript")
+        fullTranscript = ""
+
+        recognitionTask = recognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+            guard let self = self else { return }
+
+            if let error = error {
+                print("❌ Recognition error: \(error)")
+                let nsError = error as NSError
+                if nsError.domain == "kLSRErrorDomain" && nsError.code == 201 {
+                    print("⚠️ Siri and Dictation are disabled!")
+                    DispatchQueue.main.async {
+                        self.stopContinuousMacListening()
+                    }
+                }
+                return
+            }
+
+            if let result = result {
+                let transcript = result.bestTranscription.formattedString
+
+                // Update full transcript
+                if result.isFinal {
+                    self.fullTranscript += transcript + " "
+                    print("✅ Final segment: \(transcript)")
+                    print("📝 Full transcript now: \(self.fullTranscript)")
+
+                    // Send complete transcript
+                    DispatchQueue.main.async {
+                        self.onRecognitionResult?(self.fullTranscript)
+                    }
+                } else {
+                    // Send partial results in real-time
+                    let currentText = self.fullTranscript + transcript
+                    print("⏳ Partial: \(transcript) (appending to \(self.fullTranscript.count) existing chars)")
+                    DispatchQueue.main.async {
+                        self.onPartialTranscript?(currentText)
+                    }
+                }
+            }
+        }
+
+        // Configure audio format
+        let recordingFormat = inputNode?.outputFormat(forBus: 0)
+        inputNode?.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+
+        audioEngine.prepare()
+
+        do {
+            try audioEngine.start()
+            isRecording = true
+            print("✅ Continuous Mac microphone listening started")
+        } catch {
+            print("❌ Audio engine failed to start: \(error)")
+        }
+    }
+
+    func stopContinuousMacListening() {
+        print("🛑 Stopping continuous Mac microphone listening")
+
+        audioEngine?.stop()
+        inputNode?.removeTap(onBus: 0)
+
+        recognitionTask?.cancel()
+        recognitionRequest?.endAudio()
+
+        recognitionTask = nil
+        recognitionRequest = nil
+        recognizer = nil
+        audioEngine = nil
+        inputNode = nil
+
+        isRecording = false
+    }
+
+    func getFullTranscript() -> String {
+        return fullTranscript
+    }
+
+    func clearTranscript() {
+        fullTranscript = ""
+    }
+
+    // MARK: - Legacy methods for glasses microphone (keep for compatibility)
 
     func stopRecognition() {
         isRecording = false

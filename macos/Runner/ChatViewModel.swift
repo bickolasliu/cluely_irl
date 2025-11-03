@@ -16,10 +16,19 @@ class ChatViewModel: ObservableObject {
     @Published var isProcessing: Bool = false
     @Published var isRecording: Bool = false
 
+    // Conversation Assistant Mode
+    @Published var isListening: Bool = false
+    @Published var liveTranscript: String = ""
+    @Published var suggestions: [ConversationSuggestion] = []
+    @Published var analysisInterval: Double = 5.0 // seconds
+
     private var openAIService = OpenAIService()
+    private var conversationAssistant = ConversationAssistant.shared
 
     init() {
-        // Set up callback for speech recognition from glasses
+        setupConversationAssistant()
+
+        // Legacy: Set up callback for speech recognition from glasses
         SpeechStreamRecognizer.shared.onRecognitionResult = { [weak self] recognizedText in
             print("🎤 Recognized text from glasses: \(recognizedText)")
             Task { @MainActor in
@@ -29,6 +38,134 @@ class ChatViewModel: ObservableObject {
             }
         }
     }
+
+    private func setupConversationAssistant() {
+        // Real-time transcript updates (partial - while speaking)
+        SpeechStreamRecognizer.shared.onPartialTranscript = { [weak self] transcript in
+            Task { @MainActor in
+                self?.liveTranscript = transcript
+                // Also update conversation assistant with partial transcript
+                self?.conversationAssistant.updateTranscript(transcript)
+            }
+        }
+
+        // Complete transcript updates (final - after pause)
+        SpeechStreamRecognizer.shared.onRecognitionResult = { [weak self] transcript in
+            Task { @MainActor in
+                self?.liveTranscript = transcript
+                // Update conversation assistant with final transcript
+                self?.conversationAssistant.updateTranscript(transcript)
+            }
+        }
+
+        // Suggestions updates
+        conversationAssistant.onSuggestionsUpdated = { [weak self] newSuggestions in
+            Task { @MainActor in
+                self?.suggestions = newSuggestions
+            }
+        }
+
+        // Glasses display
+        conversationAssistant.onGlassesSuggestions = { [weak self] glassesText in
+            Task { @MainActor in
+                await self?.sendSuggestionsToGlasses(glassesText)
+            }
+        }
+    }
+
+    // MARK: - Conversation Assistant Controls
+
+    func startListening() {
+        print("▶️ Starting conversation assistant...")
+        isListening = true
+
+        // Start continuous Mac microphone listening
+        SpeechStreamRecognizer.shared.startContinuousMacListening(identifier: "EN")
+
+        // Start LLM analysis
+        conversationAssistant.startAnalysis()
+    }
+
+    func stopListening() {
+        print("⏹️ Stopping conversation assistant...")
+        isListening = false
+
+        // Stop microphone
+        SpeechStreamRecognizer.shared.stopContinuousMacListening()
+
+        // Stop analysis
+        conversationAssistant.stopAnalysis()
+    }
+
+    func updateAnalysisInterval(_ interval: Double) {
+        analysisInterval = interval
+        conversationAssistant.setAnalysisInterval(interval)
+    }
+
+    func clearTranscript() {
+        liveTranscript = ""
+        suggestions = []
+        conversationAssistant.clearTranscript()
+        SpeechStreamRecognizer.shared.clearTranscript()
+    }
+
+    private func sendSuggestionsToGlasses(_ text: String) async {
+        guard BluetoothManager.shared.isConnected else {
+            print("⚠️ Glasses not connected, skipping display")
+            return
+        }
+
+        print("👓 Sending suggestions to glasses")
+        print("📝 Text to send: \(text)")
+
+        let result = await BluetoothManager.shared.sendEvenAIData(
+            text: text,
+            newScreen: 0x71, // Text display mode
+            pos: 0,
+            currentPage: 1,
+            maxPage: 1
+        )
+
+        if result {
+            print("✅ Successfully sent to glasses")
+        } else {
+            print("❌ Failed to send to glasses")
+        }
+    }
+
+    func testGlassesDisplay() async {
+        print("🧪 TESTING GLASSES DISPLAY")
+
+        let testText = """
+Ask about timeline
+Mention budget
+Request examples
+Clarify scope
+Discuss risks
+"""
+
+        print("📝 Test text (5 lines):")
+        print(testText)
+
+        guard BluetoothManager.shared.isConnected else {
+            print("❌ Glasses not connected!")
+            return
+        }
+
+        print("✅ Glasses connected, sending test...")
+
+        let result = await BluetoothManager.shared.sendEvenAIData(
+            text: testText,
+            newScreen: 0x71,
+            pos: 0,
+            currentPage: 1,
+            maxPage: 1
+        )
+
+        print(result ? "✅ Test sent successfully" : "❌ Test send failed")
+    }
+
+    // MARK: - Legacy Q&A Mode (kept for backward compatibility)
 
     func sendQuestion(_ question: String) async {
         guard !question.isEmpty else { return }
@@ -80,9 +217,9 @@ class ChatViewModel: ObservableObject {
     }
 
     private func sendToGlasses(_ text: String) async {
-        print("🔧 Sending text to glasses (Flutter-style two-phase)")
+        print("🔧 Sending text to glasses (TextService mode - 0x71)")
 
-        // Truncate and format text exactly like Flutter
+        // Truncate and format text exactly like Flutter TextService
         let truncatedText = String(text.prefix(100))
 
         // Add leading newlines (Flutter adds \n\n for short text)
@@ -90,26 +227,12 @@ class ChatViewModel: ObservableObject {
 
         print("📝 Formatted text: '\(formattedText)'")
 
-        // Phase 1: Send with 0x30 status (0x31 after OR with 0x01)
-        // This prepares the glasses for text display
-        print("📤 Phase 1: Sending with 0x31 (prepare mode)")
+        // Send with 0x70 status (0x71 after OR with 0x01)
+        // This is for TEXT DISPLAY (not EvenAI voice mode!)
+        print("📤 Sending text with 0x71 (text display mode)")
         await BluetoothManager.shared.sendEvenAIData(
             text: formattedText,
-            newScreen: 0x31, // 0x01 | 0x30
-            pos: 0,
-            currentPage: 1,
-            maxPage: 1
-        )
-
-        // Wait 3 seconds (as Flutter does)
-        try? await Task.sleep(nanoseconds: 3_000_000_000)
-
-        // Phase 2: Send with 0x40 status (0x41 after OR with 0x01)
-        // This triggers auto-display/exit mode
-        print("📤 Phase 2: Sending with 0x41 (auto-display mode)")
-        await BluetoothManager.shared.sendEvenAIData(
-            text: formattedText,
-            newScreen: 0x41, // 0x01 | 0x40
+            newScreen: 0x71, // 0x01 | 0x70 (text display status)
             pos: 0,
             currentPage: 1,
             maxPage: 1

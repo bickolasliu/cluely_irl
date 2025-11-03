@@ -15,6 +15,8 @@
 		68574475B6681403C02982E1 /* ServiceIdentifiers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1387378A57B0FC73C24AE6D5 /* ServiceIdentifiers.swift */; };
 		69161B61F1735AC8A747642F /* GattProtocal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 974D8857FC7D76A7CA720609 /* GattProtocal.swift */; };
 		9015655811F01BBF08851402 /* PcmConverter.m in Sources */ = {isa = PBXBuildFile; fileRef = 138A49FEE2CD6A91B3BB6937 /* PcmConverter.m */; };
+		BB1B9DA12EB91FDA00A11F51 /* ConversationAssistant.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1B9D9F2EB91FDA00A11F51 /* ConversationAssistant.swift */; };
+		BB1B9DA22EB91FDA00A11F51 /* ConversationAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1B9DA02EB91FDA00A11F51 /* ConversationAssistantView.swift */; };
 		BB7617D82EB86C2B003CC0CC /* sns.c in Sources */ = {isa = PBXBuildFile; fileRef = BB7617D02EB86C2B003CC0CC /* sns.c */; };
 		BB7617D92EB86C2B003CC0CC /* ltpf.c in Sources */ = {isa = PBXBuildFile; fileRef = BB7617C42EB86C2B003CC0CC /* ltpf.c */; };
 		BB7617DA2EB86C2B003CC0CC /* plc.c in Sources */ = {isa = PBXBuildFile; fileRef = BB7617CD2EB86C2B003CC0CC /* plc.c */; };
@@ -79,6 +81,8 @@
 		8DFCFA4B55A7BC48C39AE53F /* SpeechStreamRecognizer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechStreamRecognizer.swift; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		974D8857FC7D76A7CA720609 /* GattProtocal.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GattProtocal.swift; sourceTree = "<group>"; };
+		BB1B9D9F2EB91FDA00A11F51 /* ConversationAssistant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAssistant.swift; sourceTree = "<group>"; };
+		BB1B9DA02EB91FDA00A11F51 /* ConversationAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAssistantView.swift; sourceTree = "<group>"; };
 		BB7617B52EB86C2B003CC0CC /* attdet.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = attdet.h; sourceTree = "<group>"; };
 		BB7617B62EB86C2B003CC0CC /* attdet.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = attdet.c; sourceTree = "<group>"; };
 		BB7617B72EB86C2B003CC0CC /* bits.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bits.h; sourceTree = "<group>"; };
@@ -166,6 +170,8 @@
 		33CC10E42044A3C60003C045 = {
 			isa = PBXGroup;
 			children = (
+				BB1B9D9F2EB91FDA00A11F51 /* ConversationAssistant.swift */,
+				BB1B9DA02EB91FDA00A11F51 /* ConversationAssistantView.swift */,
 				BBFF82372EB9072200CAAF5E /* OpenAIService.swift */,
 				BBFF82352EB9070F00CAAF5E /* EvenGPTApp.swift */,
 				BBFF82332EB906FB00CAAF5E /* ContentView.swift */,
@@ -376,6 +382,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BB1B9DA12EB91FDA00A11F51 /* ConversationAssistant.swift in Sources */,
+				BB1B9DA22EB91FDA00A11F51 /* ConversationAssistantView.swift in Sources */,
 				BBFF82382EB9072200CAAF5E /* OpenAIService.swift in Sources */,
 				BBFF82362EB9070F00CAAF5E /* EvenGPTApp.swift in Sources */,
 				BBFF82342EB906FB00CAAF5E /* ContentView.swift in Sources */,
@@ -507,7 +515,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -534,7 +542,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 12.4;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -588,7 +596,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
@@ -638,7 +646,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.15;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -665,7 +673,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 12.4;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -692,7 +700,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 12.4;
+				MACOSX_DEPLOYMENT_TARGET = 13.5;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
