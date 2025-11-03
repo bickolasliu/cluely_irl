@@ -78,14 +78,16 @@ struct ScanningView: View {
 
                 Text("Available Glasses")
                     .font(.headline)
+                    .padding(.horizontal)
 
                 ScrollView {
-                    VStack(spacing: 12) {
+                    VStack(spacing: 16) {
                         ForEach(bluetoothManager.pairedGlasses, id: \.channelNumber) { glasses in
                             GlassesDeviceRow(glasses: glasses)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12) // Add vertical padding to prevent border/shadow clipping
                 }
             }
         }
@@ -108,23 +110,72 @@ struct ScanningView: View {
 struct GlassesDeviceRow: View {
     let glasses: PairedGlasses
     @EnvironmentObject var bluetoothManager: BluetoothManager
+    @State private var isHovering = false
 
     var body: some View {
         Button(action: { connectToGlasses() }) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Pair: \(glasses.channelNumber)")
-                    .font(.headline)
-                Text("Left: \(glasses.leftDeviceName)")
-                    .font(.caption)
-                Text("Right: \(glasses.rightDeviceName)")
-                    .font(.caption)
+            HStack(spacing: 12) {
+                // Glasses icon
+                Image(systemName: "eyeglasses")
+                    .font(.system(size: 32))
+                    .foregroundColor(isHovering ? .accentColor : .secondary)
+                    .frame(width: 50, height: 50)
+                    .background(
+                        Circle()
+                            .fill(isHovering ? Color.accentColor.opacity(0.1) : Color.clear)
+                    )
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Pair: \(glasses.channelNumber)")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "l.square.fill")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text(glasses.leftDeviceName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "r.square.fill")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text(glasses.rightDeviceName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                // Chevron indicator
+                Image(systemName: "chevron.right")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .opacity(isHovering ? 1.0 : 0.5)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(8)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isHovering ? Color.accentColor.opacity(0.05) : Color(NSColor.controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isHovering ? Color.accentColor : Color.clear, lineWidth: 2)
+            )
+            .shadow(color: isHovering ? Color.black.opacity(0.1) : Color.clear, radius: 8, x: 0, y: 4)
+            .scaleEffect(isHovering ? 1.02 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isHovering)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .help("Click to connect to these glasses")
     }
 
     private func connectToGlasses() {

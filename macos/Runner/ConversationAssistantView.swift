@@ -103,24 +103,51 @@ struct ConversationAssistantView: View {
 
     private var transcriptView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Live Transcript")
-                .font(.headline)
-                .padding(.horizontal)
-                .padding(.top, 12)
+            HStack {
+                Text("Live Transcript")
+                    .font(.headline)
+
+                Spacer()
+
+                if !viewModel.liveTranscript.isEmpty {
+                    Text("\(viewModel.liveTranscript.split(separator: " ").count) words")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 12)
 
             ScrollView {
                 ScrollViewReader { proxy in
-                    Text(viewModel.liveTranscript.isEmpty ? "Waiting for speech..." : viewModel.liveTranscript)
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .id("transcript")
-                        .onChange(of: viewModel.liveTranscript) { _ in
-                            withAnimation {
-                                proxy.scrollTo("transcript", anchor: .bottom)
+                    VStack(alignment: .leading, spacing: 0) {
+                        if viewModel.liveTranscript.isEmpty {
+                            Text("Waiting for speech...")
+                                .foregroundColor(.secondary)
+                                .italic()
+                                .padding()
+                        } else {
+                            Text(viewModel.liveTranscript)
+                                .font(.system(.body, design: .default))
+                                .textSelection(.enabled)
+                                .lineSpacing(4)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                                .padding()
+                        }
+
+                        // Invisible anchor at bottom for scrolling
+                        Color.clear
+                            .frame(height: 1)
+                            .id("bottom")
+                    }
+                    .onChange(of: viewModel.liveTranscript) { _ in
+                        // Scroll to bottom when transcript updates
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                proxy.scrollTo("bottom", anchor: .bottom)
                             }
                         }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

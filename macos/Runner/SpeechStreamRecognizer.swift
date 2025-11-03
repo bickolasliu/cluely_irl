@@ -22,6 +22,7 @@ class SpeechStreamRecognizer {
 
     private var fullTranscript: String = "" // Complete ongoing transcript
     private var lastRecognizedText: String = "" // latest accepted recognized text
+    private var lastPartialUpdate: Date = Date.distantPast // Throttle partial updates
 
     let languageDic = [
         "CN": "zh-CN",
@@ -218,11 +219,14 @@ class SpeechStreamRecognizer {
                         self.onRecognitionResult?(self.fullTranscript)
                     }
                 } else {
-                    // Send partial results in real-time
-                    let currentText = self.fullTranscript + transcript
-                    print("⏳ Partial: \(transcript) (appending to \(self.fullTranscript.count) existing chars)")
-                    DispatchQueue.main.async {
-                        self.onPartialTranscript?(currentText)
+                    // Send partial results, but throttle to max 2 updates per second
+                    let now = Date()
+                    if now.timeIntervalSince(self.lastPartialUpdate) >= 0.5 {
+                        let currentText = self.fullTranscript + transcript
+                        self.lastPartialUpdate = now
+                        DispatchQueue.main.async {
+                            self.onPartialTranscript?(currentText)
+                        }
                     }
                 }
             }

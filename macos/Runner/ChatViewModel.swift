@@ -137,14 +137,14 @@ class ChatViewModel: ObservableObject {
         print("🧪 TESTING GLASSES DISPLAY")
 
         let testText = """
-Ask about timeline
-Mention budget
-Request examples
-Clarify scope
-Discuss risks
+Timeline?
+Budget?
+ROI data
+Risks
+Next steps
 """
 
-        print("📝 Test text (5 lines):")
+        print("📝 Test text (5 ultra-short keywords):")
         print(testText)
 
         guard BluetoothManager.shared.isConnected else {
