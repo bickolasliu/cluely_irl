@@ -24,6 +24,10 @@ class ConversationAssistant {
 
     private var fullTranscript: String = "" // Complete running transcript
     private var transcriptStartTime: Date? // Track when transcript started
+    private var isAnalyzing: Bool = false // Prevent concurrent analyses
+    private var lastTranscriptUpdate: Date? // Track last transcript change
+    private var currentAnalysisTask: Task<Void, Never>? // Track current task for cancellation
+    private var lastAnalyzedTranscript: String = "" // Track transcript we last analyzed
 
     private init() {}
 
@@ -42,15 +46,14 @@ class ConversationAssistant {
     // MARK: - Transcript Management
 
     func updateTranscript(_ text: String) {
-        // Update the full running transcript
+        // Update the full running transcript (throttled logging)
         fullTranscript = text
+        lastTranscriptUpdate = Date()
 
         if transcriptStartTime == nil {
             transcriptStartTime = Date()
+            print("📝 Transcript started")
         }
-
-        print("📝 Transcript updated: \(fullTranscript.count) chars total")
-        print("📄 Recent transcript: \(fullTranscript.suffix(150))...")
     }
 
     func manualAnalyze() {
@@ -65,6 +68,8 @@ class ConversationAssistant {
     func clearTranscript() {
         fullTranscript = ""
         transcriptStartTime = nil
+        lastTranscriptUpdate = nil
+        lastAnalyzedTranscript = "" // Reset so next analysis will run
         print("🗑️ Transcript cleared")
     }
 
@@ -86,10 +91,31 @@ class ConversationAssistant {
     func stopAnalysis() {
         analysisTimer?.invalidate()
         analysisTimer = nil
+
+        // Cancel any pending analysis task
+        currentAnalysisTask?.cancel()
+        currentAnalysisTask = nil
+        isAnalyzing = false
+
         print("🛑 Stopped conversation analysis")
     }
 
     private func analyzeConversation() {
+        // Prevent concurrent analyses
+        guard !isAnalyzing else {
+            print("⏭️ Skipping analysis - previous analysis still running")
+            return
+        }
+
+        // Skip if no recent transcript updates (idle for >30 seconds)
+        if let lastUpdate = lastTranscriptUpdate {
+            let idleTime = Date().timeIntervalSince(lastUpdate)
+            if idleTime > 30 {
+                print("⏭️ Skipping analysis - idle for \(Int(idleTime))s")
+                return
+            }
+        }
+
         let transcript = getRecentTranscript()
 
         guard !transcript.isEmpty else {
@@ -97,11 +123,48 @@ class ConversationAssistant {
             return
         }
 
-        print("🧠 Analyzing conversation... (\(transcript.count) chars)")
+        // Lower threshold for glasses mic (shorter voice sessions)
+        guard transcript.count > 5 else {
+            print("⏭️ Skipping analysis - transcript too short (\(transcript.count) chars)")
+            return
+        }
 
-        Task {
+        // Skip if transcript hasn't changed since last analysis
+        if transcript == lastAnalyzedTranscript {
+            print("⏭️ Skipping analysis - transcript unchanged")
+            return
+        }
+
+        print("🧠 Analyzing conversation... (\(transcript.count) chars, changed: \(transcript != lastAnalyzedTranscript))")
+        lastAnalyzedTranscript = transcript
+        isAnalyzing = true
+
+        // Cancel any existing task
+        currentAnalysisTask?.cancel()
+
+        currentAnalysisTask = Task {
+            defer {
+                Task { @MainActor in
+                    self.isAnalyzing = false
+                    self.currentAnalysisTask = nil
+                }
+            }
+
+            // Check for cancellation
+            guard !Task.isCancelled else {
+                print("⏭️ Analysis cancelled")
+                return
+            }
+
             do {
                 let suggestions = try await getSuggestions(for: transcript)
+
+                // Check again before updating UI
+                guard !Task.isCancelled else {
+                    print("⏭️ Analysis cancelled after completion")
+                    return
+                }
+
                 await MainActor.run {
                     self.onSuggestionsUpdated?(suggestions)
 
@@ -116,40 +179,82 @@ class ConversationAssistant {
     }
 
     private func getSuggestions(for transcript: String) async throws -> [ConversationSuggestion] {
-        print("📤 Sending to OpenAI API...")
+        print("📤 Sending to GPT-5 with web search enabled...")
 
-        // Calculate how much transcript to include (last ~500 chars for context, but include full if shorter)
-        let maxContextLength = 1000
-        let transcriptToUse: String
-        if transcript.count > maxContextLength {
-            // Get the last portion of the transcript
-            let startIndex = transcript.index(transcript.endIndex, offsetBy: -maxContextLength)
-            transcriptToUse = "...\(transcript[startIndex...])"
-        } else {
-            transcriptToUse = transcript
-        }
+        // Focus on the most recent part of the transcript (last 300 chars for better context)
+        let recentTranscript = String(transcript.suffix(300))
+
+        // Extract the VERY LAST sentence/utterance (most critical)
+        let lastUtterance = extractLastUtterance(from: recentTranscript)
 
         let prompt = """
-You are a conversation assistant analyzing a live conversation transcript. Based on the conversation below, provide 5 helpful and contextually relevant suggestions for what to say next.
+You are an AI assistant for smart glasses. Analyze the user's speech and provide ultra-concise, actionable information.
 
-CONVERSATION TRANSCRIPT:
-\(transcriptToUse)
+CURRENT UTTERANCE (just spoken):
+"\(lastUtterance)"
 
----
+CONTEXT (recent conversation):
+"\(recentTranscript)"
 
-Provide 5 short suggestions (3-5 words each) for what to say next. Make them:
-- Natural and conversational
-- Relevant to the most recent part of the conversation
-- Varied (questions, statements, responses, etc.)
+TASK:
+Analyze the CURRENT UTTERANCE and provide exactly 5 lines of output.
+- If it's a QUESTION: Answer with key facts (use web search for current/factual info)
+- If it's a STATEMENT: Suggest relevant follow-up points or questions
 
-Reply with ONLY the suggestions, one per line, without numbering:
+OUTPUT FORMAT:
+Return exactly 5 lines. Each line must be 6 words maximum. No numbering, bullets, or formatting.
+
+EXAMPLES:
+
+Input: "How tall is the Eiffel Tower"
+Output:
+330 meters tall
+1,083 feet
+Built 1889
+Paris landmark
+Iron lattice tower
+
+Input: "Who won the 2024 election"
+Output:
+[Current winner]
+Electoral votes
+Key states
+Victory margin
+Inauguration date
+
+Input: "discussing quarterly sales targets"
+Output:
+Current numbers?
+Growth rate
+Top performers
+Challenges
+Action items
+
+Input: "thinking about visiting Japan"
+Output:
+Best season?
+Visa requirements
+Budget estimate
+Top cities
+Trip duration
+
+CRITICAL RULES:
+1. Exactly 5 lines, no more, no less
+2. Each line: max 6 words only
+3. Focus on the CURRENT utterance (the last thing spoken)
+4. No sources, citations, or URLs
+5. No numbering (1., 2., etc.) or bullets (-, •)
+6. Be factual for questions, suggestive for statements
+7. Ultra-concise - every word counts
+
+OUTPUT (5 lines, 1-4 words each):
 """
 
-        print("📝 Prompt length: \(prompt.count) chars, transcript: \(transcriptToUse.count) chars")
+        print("📝 Sending optimized prompt (last utterance: '\(lastUtterance.prefix(50))...', context: \(recentTranscript.count) chars)...")
 
-        let response = try await openAIService.sendChatRequest(question: prompt)
+        let response = try await openAIService.sendChatRequest(question: prompt, enableWebSearch: true)
 
-        print("✅ Got response from OpenAI: \(response)")
+        print("✅ Got response with web search: \(response)")
 
         // Parse response into suggestions
         var lines = response.split(separator: "\n")
@@ -172,14 +277,47 @@ Reply with ONLY the suggestions, one per line, without numbering:
         return suggestions
     }
 
-    private func formatForGlasses(_ suggestions: [ConversationSuggestion]) -> String {
-        // Take top 5 suggestions, ensure they're brief
-        let formatted = suggestions.prefix(5).map { suggestion in
-            // Truncate to ~25 chars per line (glasses display limit)
-            let truncated = String(suggestion.text.prefix(25))
-            return truncated
+    private func extractLastUtterance(from transcript: String) -> String {
+        // Extract the last sentence or question from the transcript
+        // Look for sentence boundaries: period, question mark, or significant pause indicators
+
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Try to find the last sentence by looking for punctuation
+        let sentenceDelimiters = CharacterSet(charactersIn: ".?!")
+        let components = trimmed.components(separatedBy: sentenceDelimiters)
+
+        // Get the last non-empty component
+        let lastSentence = components.last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) ?? trimmed
+
+        // If the last sentence is very short, it might be incomplete - take more context
+        let lastUtterance = lastSentence.trimmingCharacters(in: .whitespaces)
+
+        // If it's too short (less than 5 chars), just return the last 150 chars of full transcript
+        if lastUtterance.count < 5 {
+            return String(trimmed.suffix(150))
         }
 
-        return formatted.joined(separator: "\n")
+        // Limit to last 150 chars to keep it focused
+        return String(lastUtterance.suffix(150))
+    }
+
+    private func formatForGlasses(_ suggestions: [ConversationSuggestion]) -> String {
+        // Take top 5 suggestions
+        let formatted = suggestions.prefix(5).map { suggestion in
+            // Keep ultra-short keywords as-is (should already be 1-3 words)
+            // Glasses can handle ~40 chars per line (488px width, font size 21)
+            let text = suggestion.text
+
+            if text.count > 40 {
+                return String(text.prefix(38)) + ".."
+            }
+            return text
+        }
+
+        let result = formatted.joined(separator: "\n")
+        print("👓 Formatted for glasses (\(formatted.count) lines, \(result.count) total chars):")
+        formatted.forEach { print("   '\($0)'") }
+        return result
     }
 }

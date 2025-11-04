@@ -80,12 +80,6 @@ struct ConversationAssistantView: View {
             }
             .help("Clear transcript")
 
-            // Test glasses button
-            Button(action: testGlassesDisplay) {
-                Image(systemName: "eyeglasses")
-            }
-            .help("Test glasses display")
-
             // Start/Stop button
             Button(action: toggleListening) {
                 HStack(spacing: 4) {
@@ -95,7 +89,7 @@ struct ConversationAssistantView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(viewModel.isListening ? .red : .green)
-            .help(viewModel.isListening ? "Stop continuous listening" : "Start continuous listening (glasses mic always on)")
+            .help(viewModel.isListening ? "Stop listening" : "Start conversation assistant")
         }
     }
 
@@ -103,73 +97,24 @@ struct ConversationAssistantView: View {
 
     private var transcriptView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Live Transcript")
-                    .font(.headline)
-
-                Spacer()
-
-                if !viewModel.liveTranscript.isEmpty {
-                    Text("\(viewModel.liveTranscript.split(separator: " ").count) words")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.horizontal)
-            .padding(.top, 12)
+            Text("Live Transcript")
+                .font(.headline)
+                .padding(.horizontal)
+                .padding(.top, 12)
 
             ScrollView {
                 ScrollViewReader { proxy in
-                    VStack(alignment: .leading, spacing: 0) {
-                        if viewModel.liveTranscript.isEmpty {
-                            VStack(alignment: .center, spacing: 12) {
-                                Image(systemName: "waveform")
-                                    .font(.system(size: 48))
-                                    .foregroundColor(.secondary)
-                                    .symbolEffect(.variableColor.iterative, options: .repeating, isActive: viewModel.isListening)
-
-                                if viewModel.isListening {
-                                    Text("Glasses microphone is active")
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                        .multilineTextAlignment(.center)
-
-                                    Text("Start speaking - transcript will appear here")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .multilineTextAlignment(.center)
-                                } else {
-                                    Text("Click Start to begin listening")
-                                        .font(.body)
-                                        .foregroundColor(.secondary)
-                                        .multilineTextAlignment(.center)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding()
-                        } else {
-                            Text(viewModel.liveTranscript)
-                                .font(.system(.body, design: .default))
-                                .textSelection(.enabled)
-                                .lineSpacing(6)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                                .padding()
-                        }
-
-                        // Invisible anchor at bottom for scrolling
-                        Color.clear
-                            .frame(height: 1)
-                            .id("bottom")
-                    }
-                    .onChange(of: viewModel.liveTranscript) { _ in
-                        // Scroll to bottom when transcript updates
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                proxy.scrollTo("bottom", anchor: .bottom)
+                    Text(viewModel.liveTranscript.isEmpty ? "Waiting for speech..." : viewModel.liveTranscript)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .id("transcript")
+                        .onChange(of: viewModel.liveTranscript) { _ in
+                            withAnimation {
+                                proxy.scrollTo("transcript", anchor: .bottom)
                             }
                         }
-                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -293,13 +238,6 @@ struct ConversationAssistantView: View {
             viewModel.stopListening()
         } else {
             viewModel.startListening()
-        }
-    }
-
-    private func testGlassesDisplay() {
-        print("🧪 Testing glasses display...")
-        Task {
-            await viewModel.testGlassesDisplay()
         }
     }
 

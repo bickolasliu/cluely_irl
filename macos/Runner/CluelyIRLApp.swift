@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct EvenGPTApp: App {
+struct CluelyIRLApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var bluetoothManager = BluetoothManager.shared
     @StateObject private var chatViewModel = ChatViewModel()
@@ -52,7 +52,7 @@ struct MainView: View {
 
     private var connectionBar: some View {
         HStack {
-            Text("Even G1 Conversation Assistant")
+            Text("Cluely IRL")
                 .font(.title3)
                 .bold()
 

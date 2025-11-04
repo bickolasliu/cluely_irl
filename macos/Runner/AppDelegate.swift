@@ -4,7 +4,7 @@ import SwiftUI
 class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        print("Even GPT macOS app launched")
+        print("Cluely IRL macOS app launched")
 
         // Set up Bluetooth event handlers for glasses commands
         BluetoothManager.shared.onStartVoiceInput = {

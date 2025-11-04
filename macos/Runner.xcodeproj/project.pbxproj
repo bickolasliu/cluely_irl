@@ -33,7 +33,7 @@
 		BB7617E52EB86C2B003CC0CC /* meson.build in Resources */ = {isa = PBXBuildFile; fileRef = BB7617CB2EB86C2B003CC0CC /* meson.build */; };
 		BBFF82322EB906ED00CAAF5E /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFF82312EB906ED00CAAF5E /* ChatViewModel.swift */; };
 		BBFF82342EB906FB00CAAF5E /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFF82332EB906FB00CAAF5E /* ContentView.swift */; };
-		BBFF82362EB9070F00CAAF5E /* EvenGPTApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFF82352EB9070F00CAAF5E /* EvenGPTApp.swift */; };
+		BBFF82362EB9070F00CAAF5E /* CluelyIRLApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFF82352EB9070F00CAAF5E /* CluelyIRLApp.swift */; };
 		BBFF82382EB9072200CAAF5E /* OpenAIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFF82372EB9072200CAAF5E /* OpenAIService.swift */; };
 		E0C48946C32E2BD7336F8AFB /* BluetoothManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246BA22457C8D7EA74EA5999 /* BluetoothManager.swift */; };
 /* End PBXBuildFile section */
@@ -81,8 +81,8 @@
 		8DFCFA4B55A7BC48C39AE53F /* SpeechStreamRecognizer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechStreamRecognizer.swift; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		974D8857FC7D76A7CA720609 /* GattProtocal.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GattProtocal.swift; sourceTree = "<group>"; };
-		BB1B9D9F2EB91FDA00A11F51 /* ConversationAssistant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAssistant.swift; sourceTree = "<group>"; };
-		BB1B9DA02EB91FDA00A11F51 /* ConversationAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationAssistantView.swift; sourceTree = "<group>"; };
+		BB1B9D9F2EB91FDA00A11F51 /* ConversationAssistant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConversationAssistant.swift; path = Runner/ConversationAssistant.swift; sourceTree = "<group>"; };
+		BB1B9DA02EB91FDA00A11F51 /* ConversationAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConversationAssistantView.swift; path = Runner/ConversationAssistantView.swift; sourceTree = "<group>"; };
 		BB7617B52EB86C2B003CC0CC /* attdet.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = attdet.h; sourceTree = "<group>"; };
 		BB7617B62EB86C2B003CC0CC /* attdet.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = attdet.c; sourceTree = "<group>"; };
 		BB7617B72EB86C2B003CC0CC /* bits.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bits.h; sourceTree = "<group>"; };
@@ -119,7 +119,7 @@
 		BB7617D62EB86C2B003CC0CC /* tns.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = tns.c; sourceTree = "<group>"; };
 		BBFF82312EB906ED00CAAF5E /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChatViewModel.swift; path = Runner/ChatViewModel.swift; sourceTree = "<group>"; };
 		BBFF82332EB906FB00CAAF5E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ContentView.swift; path = Runner/ContentView.swift; sourceTree = "<group>"; };
-		BBFF82352EB9070F00CAAF5E /* EvenGPTApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EvenGPTApp.swift; path = Runner/EvenGPTApp.swift; sourceTree = "<group>"; };
+		BBFF82352EB9070F00CAAF5E /* CluelyIRLApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CluelyIRLApp.swift; path = Runner/CluelyIRLApp.swift; sourceTree = "<group>"; };
 		BBFF82372EB9072200CAAF5E /* OpenAIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = OpenAIService.swift; path = Runner/OpenAIService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -173,7 +173,7 @@
 				BB1B9D9F2EB91FDA00A11F51 /* ConversationAssistant.swift */,
 				BB1B9DA02EB91FDA00A11F51 /* ConversationAssistantView.swift */,
 				BBFF82372EB9072200CAAF5E /* OpenAIService.swift */,
-				BBFF82352EB9070F00CAAF5E /* EvenGPTApp.swift */,
+				BBFF82352EB9070F00CAAF5E /* CluelyIRLApp.swift */,
 				BBFF82332EB906FB00CAAF5E /* ContentView.swift */,
 				BBFF82312EB906ED00CAAF5E /* ChatViewModel.swift */,
 				33FAB671232836740065AC1E /* Runner */,
@@ -439,7 +439,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.demoAiEven.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cluely.cluelyirl.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/demo_ai_even.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/demo_ai_even";
@@ -453,7 +453,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.demoAiEven.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cluely.cluelyirl.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/demo_ai_even.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/demo_ai_even";
@@ -467,7 +467,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.demoAiEven.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cluely.cluelyirl.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/demo_ai_even.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/demo_ai_even";
